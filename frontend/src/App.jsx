@@ -4,12 +4,13 @@ import Dashboard from "./pages/Dashboard";
 import KatalogAset from "./pages/KatalogAset";
 import FormPinjam from "./pages/FormPinjam";
 import PersetujuanPinjam from "./pages/PersetujuanPinjam";
-import Sidebar from "./components/Sidebar";
+import MasterKategori from "./pages/MasterKategori";
+import MasterLokasi from "./pages/MasterLokasi";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState("Pengguna Biasa");
-  const [currentPage, setCurrentPage] = useState("Dashboard"); // Mengatur halaman aktif
+  const [currentPage, setCurrentPage] = useState("Dashboard");
 
   const handleLoginSuccess = (role) => {
     setUserRole(role);
@@ -21,74 +22,44 @@ export default function App() {
     setIsLoggedIn(false);
   };
 
-  // Logika pembagian render halaman
+  // 1. PROTEKSI LOGIN
   if (!isLoggedIn) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // Jika sudah login, cek halaman apa yang sedang aktif
-  return (
-    <>
-      {currentPage === "Dashboard" && (
-        <Dashboard
-          role={userRole}
-          setRole={setUserRole}
-          onLogout={handleLogout}
-          onNavigate={setCurrentPage}
-          currentPage={currentPage}
-        />
-      )}
-      {currentPage === "Katalog Aset" && (
-        <KatalogAset
-          role={userRole}
-          setRole={setUserRole}
-          onLogout={handleLogout}
-          onNavigate={setCurrentPage}
-          currentPage={currentPage}
-        />
-      )}
-      {currentPage === "Peminjaman Saya" && (
-        <FormPinjam
-          role={userRole}
-          setRole={setUserRole}
-          onLogout={handleLogout}
-          onNavigate={setCurrentPage}
-          currentPage={currentPage}
-        />
-      )}
-      {currentPage === "Persetujuan Pinjam" && (
-        <PersetujuanPinjam
-          role={userRole}
-          setRole={setUserRole}
-          onLogout={handleLogout}
-          onNavigate={setCurrentPage}
-          currentPage={currentPage}
-        />
-      )}
-      {currentPage === "Master Kategori" && (
-        <div className="flex bg-slate-100 min-h-screen w-full">
-          <Sidebar
-            currentRole={userRole}
-            changeRole={setUserRole}
-            onLogout={handleLogout}
-            onNavigate={setCurrentPage}
-            currentPage={currentPage}
-          />
-          <div className="p-8 font-bold">Halaman Master Kategori (Segera Hadir)</div>
-        </div>
-      )}
-      {currentPage === "Master Lokasi" && (
-        <div className="flex bg-slate-100 min-h-screen w-full">
-          <Sidebar
-            currentRole={userRole}
-            changeRole={setUserRole}
-            onLogout={handleLogout}
-            onNavigate={setCurrentPage}
-            currentPage={currentPage}
-          />
-          <div className="p-8 font-bold">Halaman Master Lokasi (Segera Hadir)</div>
-        </div>
-      )}
-    </>
-  );
+  // 2. LOGIKA RENDERING HALAMAN MENGGUNAKAN SWITCH CASE
+  const renderPage = () => {
+    const sharedProps = {
+      role: userRole,
+      setRole: setUserRole,
+      onLogout: handleLogout,
+      onNavigate: setCurrentPage,
+      currentPage: currentPage,
+    };
+
+    switch (currentPage) {
+      case "Dashboard":
+        return <Dashboard {...sharedProps} />;
+
+      case "Katalog Aset":
+        return <KatalogAset {...sharedProps} />;
+
+      case "Peminjaman Saya":
+        return <FormPinjam {...sharedProps} />;
+
+      case "Persetujuan Pinjam":
+        return <PersetujuanPinjam {...sharedProps} />;
+
+      case "Master Kategori":
+        return <MasterKategori {...sharedProps} />;
+
+      case "Master Lokasi":
+        return <MasterLokasi {...sharedProps} />;
+
+      default:
+        return <Dashboard {...sharedProps} />;
+    }
+  };
+
+  return <>{renderPage()}</>;
 }
