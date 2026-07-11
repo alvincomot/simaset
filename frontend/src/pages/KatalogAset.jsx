@@ -3,7 +3,7 @@ import Sidebar from "../components/Sidebar";
 import { Search, Filter, Plus, Edit, Trash2 } from "lucide-react";
 
 export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
-  // 1. Data Palsu / Mock Data Aset sesuai kriteria PRD
+  // 1. Data Palsu
   const [assets, setAssets] = useState([
     {
       id: 1,
