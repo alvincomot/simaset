@@ -2,7 +2,7 @@ import React from "react";
 import Sidebar from "../components/Sidebar";
 import { Box, CheckCircle, AlertTriangle, Clock } from "lucide-react";
 
-export default function Dashboard({ role, setRole, onLogout }) {
+export default function Dashboard({ role, setRole, onLogout, onNavigate }) {
   const stats = [
     { title: "Total Aset", value: "142 Barang", icon: <Box className="text-blue-600" />, bg: "bg-blue-50" },
     {
@@ -17,7 +17,13 @@ export default function Dashboard({ role, setRole, onLogout }) {
 
   return (
     <div className="flex bg-slate-100 min-h-screen font-sans text-slate-800 w-full">
-      <Sidebar currentRole={role} changeRole={setRole} onLogout={onLogout} />
+      <Sidebar
+        currentRole={role}
+        changeRole={setRole}
+        onLogout={onLogout}
+        onNavigate={onNavigate}
+        currentPage="Dashboard"
+      />
 
       <div className="flex-1 flex flex-col">
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center shadow-sm">
