@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import KatalogAset from "./pages/KatalogAset";
+import FormPinjam from "./pages/FormPinjam";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -26,7 +27,7 @@ export default function App() {
   // Jika sudah login, cek halaman apa yang sedang aktif
   return (
     <>
-      {currentPage === "Dashboard" ? (
+      {currentPage === "Dashboard" && (
         <Dashboard
           role={userRole}
           setRole={setUserRole}
@@ -34,8 +35,18 @@ export default function App() {
           onNavigate={setCurrentPage}
           currentPage={currentPage}
         />
-      ) : (
+      )}
+      {currentPage === "Katalog Aset" && (
         <KatalogAset
+          role={userRole}
+          setRole={setUserRole}
+          onLogout={handleLogout}
+          onNavigate={setCurrentPage}
+          currentPage={currentPage}
+        />
+      )}
+      {currentPage === "Peminjaman Saya" && (
+        <FormPinjam
           role={userRole}
           setRole={setUserRole}
           onLogout={handleLogout}
