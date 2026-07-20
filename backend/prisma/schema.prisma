@@ -29,6 +29,13 @@ enum StatusKetersediaan {
   PEMELIHARAAN
 }
 
+enum StatusPinjam {
+  PENDING
+  AKTIF
+  DITOLAK
+  SELESAI
+}
+
 model user {
   id           Int         @id @default(autoincrement())
   nim          String      @unique @db.VarChar(20)
@@ -86,7 +93,7 @@ model borrowing {
   tanggalPinjam    DateTime
   tenggatWaktu     DateTime
   tanggalKembali   DateTime?
-  statusPeminjaman String      @default("Menunggu") // Bisa juga pakai Enum
+  statusPeminjaman StatusPinjam      @default(PENDING)
   kondisiKembali   KondisiAset?
   catatan          String?     @db.Text
   createdAt        DateTime    @default(now())
