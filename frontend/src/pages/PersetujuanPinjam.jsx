@@ -1,64 +1,66 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import api from "../services/api";
 import Sidebar from "../components/Sidebar";
-import { Check, X, Calendar, User, ArrowUpRight, ArrowDownLeft, Sliders } from "lucide-react";
+import { Check, X, Calendar, User, ArrowUpRight, ArrowDownLeft, Sliders, Loader2 } from "lucide-react";
 
 export default function PersetujuanPinjam({ role, setRole, onLogout, onNavigate, currentPage }) {
-  // Aktif Tab: 'request' atau 'dipinjam'
   const [activeTab, setActiveTab] = useState("request");
+  const [peminjamanData, setPeminjamanData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock Data Gabungan (Siklus Hidup Peminjaman)
-  const [peminjamanData, setPeminjamanData] = useState([
-    {
-      id: 1,
-      namaPeminjam: "Andi Saputra",
-      nim: "A11.2023.12345",
-      barang: "Proyektor Epson X500",
-      tanggalPinjam: "2026-07-15",
-      tenggatKembali: "2026-07-18",
-      tujuan: "Digunakan untuk presentasi tugas akhir matakuliah PBP di Ruang Kelas FTI.",
-      status: "Pending", // Pending, Disetujui, Ditolak, Dikembalikan
-      kondisiKembali: "Baik",
-    },
-    {
-      id: 2,
-      namaPeminjam: "Siti Rahma",
-      nim: "A11.2023.54321",
-      barang: "Kursi Kuliah Chitose",
-      tanggalPinjam: "2026-07-20",
-      tenggatKembali: "2026-07-21",
-      tujuan: "Kekurangan kursi untuk acara seminar himpunan mahasiswa di Aula Gedung H.",
-      status: "Pending",
-      kondisiKembali: "Baik",
-    },
-    {
-      id: 3,
-      namaPeminjam: "Budi Santoso",
-      nim: "A11.2023.99999",
-      barang: "Logitech WebCam C922",
-      tanggalPinjam: "2026-07-10",
-      tenggatKembali: "2026-07-12",
-      tujuan: "Live streaming sidang umum HMP.",
-      status: "Disetujui", // Ini otomatis masuk ke tab "Sedang Dipinjam" (Check-out Berhasil)
-      kondisiKembali: "Baik",
-    },
-  ]);
+  // Ambil data semua transaksi peminjaman saat komponen dimuat
+  useEffect(() => {
+    fetchDataPeminjaman();
+  }, []);
 
-  // Alur 1: Mengatur Tindakan Approve / Reject (Check-out)
-  const handleAction = (id, tindakan) => {
-    setPeminjamanData((prev) => prev.map((item) => (item.id === id ? { ...item, status: tindakan } : item)));
+  const fetchDataPeminjaman = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get("/borrowing");
+      setPeminjamanData(response.data.data);
+    } catch (error) {
+      console.error("Gagal mengambil data peminjaman:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Alur 2: Mengatur Proses Terima Pengembalian & Mengubah Kondisi Fisik (Check-in)
-  const handleCheckIn = (id, kondisi) => {
-    setPeminjamanData((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: "Dikembalikan", kondisiKembali: kondisi } : item)),
-    );
-    alert(`Sukses! Barang berhasil masuk kembali ke inventaris dengan kondisi: ${kondisi}`);
+  // approve / reject
+  const handleAction = async (id, tindakan) => {
+    try {
+      const endpoint = tindakan === "SETUJUI" ? `/borrowing/approve/${id}` : `/borrowing/reject/${id}`;
+      const response = await api.post(endpoint);
+
+      if (response.data.status === "success") {
+        alert(`Permintaan peminjaman berhasil ${tindakan === "SETUJUI" ? "disetujui" : "ditolak"}!`);
+        fetchDataPeminjaman();
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || "Gagal memproses tindakan.");
+    }
   };
 
-  // Filter data berdasarkan Tab Aktif
-  const requests = peminjamanData.filter((item) => item.status === "Pending" || item.status === "Ditolak");
-  const activeLoans = peminjamanData.filter((item) => item.status === "Disetujui");
+  // Proses Terima Pengembalian
+  const handleCheckIn = async (id, kondisi) => {
+    try {
+      const response = await api.post(`/borrowing/return/${id}`, {
+        kondisiKembali: kondisi.toUpperCase(),
+        catatan: `Dikembalikan dengan kondisi ${kondisi}`,
+      });
+
+      if (response.data.status === "success") {
+        alert(`Sukses! Barang berhasil dikembalikan dengan kondisi: ${kondisi}`);
+        fetchDataPeminjaman();
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || "Gagal memproses pengembalian.");
+    }
+  };
+
+  const requests = peminjamanData.filter((item) => item.statusPeminjaman === "PENDING");
+  const activeLoans = peminjamanData.filter((item) => item.statusPeminjaman === "AKTIF");
 
   return (
     <div className="flex bg-slate-100 min-h-screen font-sans text-slate-800 w-full">
@@ -90,7 +92,7 @@ export default function PersetujuanPinjam({ role, setRole, onLogout, onNavigate,
               }`}
             >
               <ArrowUpRight size={16} />
-              Antrean Pengajuan ({requests.filter((r) => r.status === "Pending").length})
+              Antrean Pengajuan ({requests.length})
             </button>
             <button
               onClick={() => setActiveTab("dipinjam")}
@@ -109,135 +111,164 @@ export default function PersetujuanPinjam({ role, setRole, onLogout, onNavigate,
         {/* Konten Utama */}
         <main className="p-8 flex-1">
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* --- TAB 1: REQUEST PEMINJAMAN --- */}
-            {activeTab === "request" &&
-              (requests.length === 0 ? (
-                <div className="bg-white text-center py-12 rounded-2xl border border-slate-200 text-slate-500">
-                  Tidak ada antrean pengajuan peminjaman saat ini.
-                </div>
-              ) : (
-                requests.map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row justify-between gap-6"
-                  >
-                    <div className="space-y-4 flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-slate-100 p-2 rounded-lg text-slate-600">
-                          <User size={18} />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-base text-slate-900">{item.namaPeminjam}</h4>
-                          <p className="text-xs text-slate-500">{item.nim}</p>
-                        </div>
-                        <span
-                          className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full ${item.status === "Pending" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}
-                        >
-                          {item.status}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div>
-                          <span className="text-xs font-medium text-slate-400 block mb-0.5">BARANG</span>
-                          <span className="font-medium text-slate-700">{item.barang}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs font-medium text-slate-400 block mb-0.5">DURASI PINJAM</span>
-                          <span className="font-medium text-slate-700 flex items-center gap-1.5 text-xs">
-                            <Calendar size={14} className="text-slate-400" /> {item.tanggalPinjam} s/d{" "}
-                            {item.tenggatKembali}
-                          </span>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-xs font-medium text-slate-400 block mb-1">ALASAN / TUJUAN</span>
-                        <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          {item.tujuan}
-                        </p>
-                      </div>
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="animate-spin text-blue-600" size={32} />
+              </div>
+            ) : (
+              <>
+                {/* --- TAB 1: REQUEST PEMINJAMAN --- */}
+                {activeTab === "request" &&
+                  (requests.length === 0 ? (
+                    <div className="bg-white text-center py-12 rounded-2xl border border-slate-200 text-slate-500">
+                      Tidak ada antrean pengajuan peminjaman saat ini.
                     </div>
-
-                    {item.status === "Pending" && (
-                      <div className="flex md:flex-col justify-end gap-3 shrink-0 self-end md:self-center w-full md:w-auto">
-                        <button
-                          onClick={() => handleAction(item.id, "Disetujui")}
-                          className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2.5 rounded-xl text-sm transition shadow-sm cursor-pointer"
-                        >
-                          <Check size={16} /> Setujui
-                        </button>
-                        <button
-                          onClick={() => handleAction(item.id, "Ditolak")}
-                          className="flex-1 flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-medium px-4 py-2.5 rounded-xl text-sm transition cursor-pointer"
-                        >
-                          <X size={16} /> Tolak
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ))}
-
-            {/* --- TAB 2: PEMINJAMAN AKTIF & VERIFIKASI CHECK-IN --- */}
-            {activeTab === "dipinjam" &&
-              (activeLoans.length === 0 ? (
-                <div className="bg-white text-center py-12 rounded-2xl border border-slate-200 text-slate-500">
-                  Tidak ada aset yang sedang dipinjam saat ini.
-                </div>
-              ) : (
-                activeLoans.map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row justify-between gap-6 border-l-4 border-l-blue-500"
-                  >
-                    <div className="space-y-4 flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
-                          <User size={18} />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-base text-slate-900">{item.namaPeminjam}</h4>
-                          <p className="text-xs text-slate-500">{item.nim}</p>
-                        </div>
-                        <span className="ml-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 animated-pulse">
-                          Sedang Dipinjam
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div>
-                          <span className="text-xs font-medium text-slate-400 block mb-0.5">BARANG YANG DIBAWA</span>
-                          <span className="font-bold text-slate-800">{item.barang}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs font-medium text-slate-400 block mb-0.5">TENGGAT PENGEMBALIAN</span>
-                          <span className="font-medium text-rose-600 flex items-center gap-1.5 text-xs font-bold">
-                            <Calendar size={14} /> Harus Kembali: {item.tenggatKembali}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* SISI VERIFIKASI KONDISI BARANG SAAT DIKEMBALIKAN */}
-                    <div className="flex md:flex-col justify-end gap-2 shrink-0 w-full md:w-56 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                        <Sliders size={12} /> Verifikasi Kondisi:
-                      </span>
-                      <button
-                        onClick={() => handleCheckIn(item.id, "Baik")}
-                        className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm"
+                  ) : (
+                    requests.map((item) => (
+                      <div
+                        key={item.id}
+                        className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row justify-between gap-6"
                       >
-                        <Check size={14} /> Terima (Kondisi Baik)
-                      </button>
-                      <button
-                        onClick={() => handleCheckIn(item.id, "Rusak")}
-                        className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm"
-                      >
-                        <X size={14} /> Terima (Kondisi Rusak)
-                      </button>
+                        <div className="space-y-4 flex-1">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-slate-100 p-2 rounded-lg text-slate-600">
+                              <User size={18} />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-base text-slate-900">
+                                {item.user?.namaLengkap || "N/A"}
+                              </h4>
+                              <p className="text-xs text-slate-500">{item.user?.nim || "N/A"}</p>
+                            </div>
+                            <span className="ml-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                              Menunggu
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                              <span className="text-xs font-medium text-slate-400 block mb-0.5">BARANG</span>
+                              <span className="font-medium text-slate-700">{item.asset?.namaAset}</span>
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-slate-400 block mb-0.5">DURASI PINJAM</span>
+                              <span className="font-medium text-slate-700 flex items-center gap-1.5 text-xs">
+                                <Calendar size={14} className="text-slate-400" />
+                                {new Date(item.tanggalPinjam).toLocaleDateString("id-ID")} s/d{" "}
+                                {new Date(item.tenggatWaktu).toLocaleDateString("id-ID")}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-slate-400 block mb-1">
+                              ALASAN / TUJUAN / CATATAN
+                            </span>
+                            <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              {item.catatan || "Tidak ada catatan."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex md:flex-col justify-end gap-3 shrink-0 self-end md:self-center w-full md:w-auto">
+                          <button
+                            onClick={() => handleAction(item.id, "SETUJUI")}
+                            className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2.5 rounded-xl text-sm transition shadow-sm cursor-pointer"
+                          >
+                            <Check size={16} /> Setujui
+                          </button>
+                          <button
+                            onClick={() => handleAction(item.id, "TOLAK")}
+                            className="flex-1 flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-medium px-4 py-2.5 rounded-xl text-sm transition cursor-pointer"
+                          >
+                            <X size={16} /> Tolak
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ))}
+
+                {/* --- TAB 2: PEMINJAMAN AKTIF & VERIFIKASI CHECK-IN --- */}
+                {activeTab === "dipinjam" &&
+                  (activeLoans.length === 0 ? (
+                    <div className="bg-white text-center py-12 rounded-2xl border border-slate-200 text-slate-500">
+                      Tidak ada aset yang sedang dipinjam saat ini.
                     </div>
-                  </div>
-                ))
-              ))}
+                  ) : (
+                    activeLoans.map((item) => {
+                      const hariIni = new Date().toISOString().split("T")[0];
+                      const tenggatFormat = new Date(item.tenggatWaktu).toISOString().split("T")[0];
+                      const apakahTerlambat = hariIni > tenggatFormat;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`bg-white rounded-2xl shadow-sm border p-6 flex flex-col md:flex-row justify-between gap-6 border-l-4 ${
+                            apakahTerlambat ? "border-rose-500 border-l-rose-500" : "border-slate-200 border-l-blue-500"
+                          }`}
+                        >
+                          <div className="space-y-4 flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+                                <User size={18} />
+                              </div>
+                              <div>
+                                <h4 className="font-semibold text-base text-slate-900">{item.user?.namaLengkap}</h4>
+                                <p className="text-xs text-slate-500">{item.user?.nim}</p>
+                              </div>
+                              <span
+                                className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full ${
+                                  apakahTerlambat ? "bg-rose-100 text-rose-700" : "bg-blue-100 text-blue-700"
+                                }`}
+                              >
+                                {apakahTerlambat ? "Terlambat" : "Sedang Dipinjam"}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
+                              <div>
+                                <span className="text-xs font-medium text-slate-400 block mb-0.5">
+                                  BARANG YANG DIBAWA
+                                </span>
+                                <span className="font-bold text-slate-800">{item.asset?.namaAset}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs font-medium text-slate-400 block mb-0.5">
+                                  TENGGAT PENGEMBALIAN
+                                </span>
+                                <span
+                                  className={`flex items-center gap-1.5 text-xs font-bold ${apakahTerlambat ? "text-rose-600" : "text-slate-600"}`}
+                                >
+                                  <Calendar size={14} /> Harus Kembali:{" "}
+                                  {new Date(item.tenggatWaktu).toLocaleDateString("id-ID")}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* VERIFIKASI KONDISI BARANG SAAT DIKEMBALIKAN */}
+                          <div className="flex md:flex-col justify-end gap-2 shrink-0 w-full md:w-56 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                              <Sliders size={12} /> Verifikasi Kondisi:
+                            </span>
+                            <button
+                              onClick={() => handleCheckIn(item.id, "Baik")}
+                              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm"
+                            >
+                              <Check size={14} /> Terima (Kondisi Baik)
+                            </button>
+                            <button
+                              onClick={() => handleCheckIn(item.id, "Rusak")}
+                              className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm"
+                            >
+                              <X size={14} /> Terima (Kondisi Rusak)
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ))}
+              </>
+            )}
           </div>
         </main>
       </div>
