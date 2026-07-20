@@ -1,18 +1,19 @@
 import React, { useState } from "react";
 import { Lock, User, AlertCircle, Mail, X, CheckCircle2 } from "lucide-react";
+import api from "../services/api";
 
 export default function Login({ onLoginSuccess }) {
   const [nim, setNim] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // State Baru untuk Fitur Lupa Password
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [emailLupa, setEmailLupa] = useState("");
   const [errorModal, setErrorModal] = useState("");
   const [suksesModal, setSuksesModal] = useState("");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -21,15 +22,32 @@ export default function Login({ onLoginSuccess }) {
       return;
     }
 
-    console.log("Logging in with:", { nim, password });
+    setLoading(true);
 
-    // Login role mapping bypass
-    const mockRole = nim.includes("1") ? "Super Admin" : "Pengguna Biasa";
-    onLoginSuccess(mockRole);
+    try {
+      setError("");
+
+      const response = await api.post("/auth/login", {
+        nim: nim,
+        password: password,
+      });
+
+      const { token, user } = response.data.data;
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      onLoginSuccess(user.role);
+    } catch (err) {
+      const pesanError = err.response?.data?.message || "NIM/NIP atau Password salah.";
+      setError(pesanError);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Handler Proses Simulasi Lupa Password
-  const handleResetPassword = (e) => {
+  // Lupa Password
+  const handleResetPassword = async (e) => {
     e.preventDefault();
     setErrorModal("");
     setSuksesModal("");
@@ -39,15 +57,31 @@ export default function Login({ onLoginSuccess }) {
       return;
     }
 
-    // validasi domain email mahasiswa UKSW
+    // Validasi domain email @student
     if (!emailLupa.endsWith("@student.uksw.edu")) {
       setErrorModal("Sistem hanya menerima email mahasiswa dengan domain @student.uksw.edu");
       return;
     }
 
-    // Jika lolos validasi domain
-    setSuksesModal("Link reset password berhasil dikirim ke email kamu! Silakan cek folder inbox atau spam.");
-    setEmailLupa("");
+    setLoading(true);
+
+    try {
+      const extractedNim = emailLupa.split("@")[0];
+
+      const response = await api.post("/auth/forgot-password", {
+        nim: extractedNim,
+      });
+
+      if (response.data.status === "success") {
+        setSuksesModal(response.data.message || "Link reset password berhasil dikirim!");
+        setEmailLupa("");
+      }
+    } catch (err) {
+      const pesanError = err.response?.data?.message || "Gagal memproses permintaan reset password.";
+      setErrorModal(pesanError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -79,6 +113,7 @@ export default function Login({ onLoginSuccess }) {
                 type="text"
                 placeholder="Contoh: 67202XXXX"
                 value={nim}
+                disabled={loading}
                 onChange={(e) => setNim(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition text-sm outline-none"
               />
@@ -88,9 +123,10 @@ export default function Login({ onLoginSuccess }) {
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider">Password</label>
-              {/* BUTTON PEMICU MODAL LUPA PASSWORD */}
+              {/* button lupa pw */}
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => {
                   setIsModalOpen(true);
                   setErrorModal("");
@@ -109,6 +145,7 @@ export default function Login({ onLoginSuccess }) {
                 type="password"
                 placeholder="••••••••"
                 value={password}
+                disabled={loading}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition text-sm outline-none"
               />
@@ -117,18 +154,19 @@ export default function Login({ onLoginSuccess }) {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition text-sm shadow-md shadow-blue-100 mt-2 cursor-pointer"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition text-sm shadow-md shadow-blue-100 mt-2 cursor-pointer flex items-center justify-center disabled:opacity-50"
           >
-            Masuk
+            {loading ? "Memproses..." : "Masuk"}
           </button>
         </form>
       </div>
 
-      {/* --- BACKDROP & MODAL POP-UP LUPA PASSWORD --- */}
+      {/* --- backdrop & modal lupa pw --- */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl relative border border-slate-100">
-            {/* Tombol Close Modal */}
+            {/* tombol close modal */}
             <button
               onClick={() => setIsModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -143,7 +181,7 @@ export default function Login({ onLoginSuccess }) {
               </p>
             </div>
 
-            {/* Error / Sukses State Khusus di dalam Modal */}
+            {/* error / sukses state dalam Modal */}
             {errorModal && (
               <div className="mb-3 bg-rose-50 border border-rose-100 text-rose-600 p-3 rounded-xl text-xs flex items-start gap-1.5">
                 <AlertCircle size={14} className="shrink-0 mt-0.5" />
@@ -179,9 +217,10 @@ export default function Login({ onLoginSuccess }) {
 
               <button
                 type="submit"
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2 rounded-xl text-xs transition cursor-pointer"
+                disabled={loading}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2 rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
               >
-                Kirim Tautan Reset
+                {loading ? "Memproses..." : "Kirim Tautan Reset"}
               </button>
             </form>
           </div>

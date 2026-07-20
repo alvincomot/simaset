@@ -1,18 +1,47 @@
 import React from "react";
 import { LayoutDashboard, Box, MapPin, ClipboardList, LogOut, Layers } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 
-export default function Sidebar({ currentRole, changeRole, onLogout, onNavigate, currentPage }) {
+export default function Sidebar({ currentRole, changeRole, onLogout }) {
+  const location = useLocation();
+
   const menuItems = [
     {
       name: "Dashboard",
+      path: "/dashboard",
       icon: <LayoutDashboard size={20} />,
-      roles: ["Super Admin", "Manajer Aset", "Pengguna Biasa"],
+      roles: ["SUPER_ADMIN", "STAFF", "USER"],
     },
-    { name: "Katalog Aset", icon: <Box size={20} />, roles: ["Super Admin", "Manajer Aset", "Pengguna Biasa"] },
-    { name: "Peminjaman Saya", icon: <ClipboardList size={20} />, roles: ["Pengguna Biasa"] },
-    { name: "Persetujuan Pinjam", icon: <ClipboardList size={20} />, roles: ["Super Admin", "Manajer Aset"] },
-    { name: "Master Kategori", icon: <Layers size={20} />, roles: ["Super Admin"] },
-    { name: "Master Lokasi", icon: <MapPin size={20} />, roles: ["Super Admin"] },
+    {
+      name: "Katalog Aset",
+      path: "/katalog-aset",
+      icon: <Box size={20} />,
+      roles: ["SUPER_ADMIN", "STAFF", "USER"],
+    },
+    {
+      name: "Peminjaman Saya",
+      path: "/peminjaman-saya",
+      icon: <ClipboardList size={20} />,
+      roles: ["USER"],
+    },
+    {
+      name: "Persetujuan Pinjam",
+      path: "/persetujuan-pinjam",
+      icon: <ClipboardList size={20} />,
+      roles: ["SUPER_ADMIN", "STAFF"],
+    },
+    {
+      name: "Master Kategori",
+      path: "/master-kategori",
+      icon: <Layers size={20} />,
+      roles: ["SUPER_ADMIN"],
+    },
+    {
+      name: "Master Lokasi",
+      path: "/master-lokasi",
+      icon: <MapPin size={20} />,
+      roles: ["SUPER_ADMIN"],
+    },
   ];
 
   const filteredMenu = menuItems.filter((item) => item.roles.includes(currentRole));
@@ -35,33 +64,35 @@ export default function Sidebar({ currentRole, changeRole, onLogout, onNavigate,
             onChange={(e) => changeRole(e.target.value)}
             className="w-full bg-slate-700 text-xs rounded p-1 text-white outline-none"
           >
-            <option value="Pengguna Biasa">Pengguna Biasa (Mhs)</option>
-            <option value="Manajer Aset">Manajer Aset (Staf)</option>
-            <option value="Super Admin">Super Admin (Koordinator)</option>
+            <option value="USER">Pengguna Biasa (Mhs)</option>
+            <option value="STAFF">Manajer Aset (Staf)</option>
+            <option value="SUPER_ADMIN">Super Admin (Koordinator)</option>
           </select>
         </div>
 
         <nav className="space-y-1">
-          {filteredMenu.map((item, index) => (
-            <button
-              key={index}
-              onClick={() => onNavigate(item.name)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition font-medium ${
-                item.name === currentPage
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              {item.icon}
-              {item.name}
-            </button>
-          ))}
+          {filteredMenu.map((item, index) => {
+            const isActive = location.pathname === item.path;
+
+            return (
+              <Link
+                key={index}
+                to={item.path}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition font-medium ${
+                  isActive ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {item.icon}
+                {item.name}
+              </Link>
+            );
+          })}
         </nav>
       </div>
 
       <button
         onClick={onLogout}
-        className="flex items-center gap-3 px-3 py-2.5 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded-xl text-sm transition font-medium mt-auto"
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded-xl text-sm transition font-medium mt-auto"
       >
         <LogOut size={20} />
         Keluar
