@@ -1,22 +1,22 @@
 import prisma from "../config/prisma.js";
 
 //create data
-export const requestBorrowing = async (req, res) =>{
+export const requestBorrowing = async (req, res) => {
   try {
     const { assetId, tenggatWaktu, catatan } = req.body;
     const userId = req.user.id;
 
     //check sattus
     const asset = await prisma.asset.findUnique({
-      where: { id: parseInt(assetId) }
-    })
+      where: { id: parseInt(assetId) },
+    });
 
-    if(!asset) {
-      return res.status(404).json({status: 'error', message: 'Aset tidak ditemukan'})
+    if (!asset) {
+      return res.status(404).json({ status: "error", message: "Aset tidak ditemukan" });
     }
 
-    if (asset.statusKetersediaan !== 'TERSEDIA') {
-      return res.status(400).json({status: 'error', message: 'Aset tidak tersedia untuk dipinjam'})  
+    if (asset.statusKetersediaan !== "TERSEDIA") {
+      return res.status(400).json({ status: "error", message: "Aset tidak tersedia untuk dipinjam" });
     }
 
     //request borrowing
@@ -26,20 +26,20 @@ export const requestBorrowing = async (req, res) =>{
         assetId: parseInt(assetId),
         tanggalPinjam: new Date(),
         tenggatWaktu: new Date(tenggatWaktu),
-        statusPeminjaman: 'PENDING',
-        catatan: catatan
-      }
+        statusPeminjaman: "PENDING",
+        catatan: catatan,
+      },
     });
 
     res.status(200).json({
-      status: 'success',
-      message: 'Permintaan pinjaman berhasil diajukan',
-      data: borrowing
+      status: "success",
+      message: "Permintaan pinjaman berhasil diajukan",
+      data: borrowing,
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: 'Gagal mengajukan pinjaman'
+      status: "error",
+      message: "Gagal mengajukan pinjaman",
     });
   }
 };
@@ -48,15 +48,15 @@ export const requestBorrowing = async (req, res) =>{
 export const approveBorrowing = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     //validate borrowing data
     const borrowing = await prisma.borrowing.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
     });
-    if(!borrowing || borrowing.statusPeminjaman !== 'PENDING'){
+    if (!borrowing || borrowing.statusPeminjaman !== "PENDING") {
       return res.status(400).json({
-        status: 'error',
-        message: 'Data peminjaman tidak valid atau sudah diproses'
+        status: "error",
+        message: "Data peminjaman tidak valid atau sudah diproses",
       });
     }
 
@@ -64,41 +64,77 @@ export const approveBorrowing = async (req, res) => {
       //changge transaction status 'aktif'
       prisma.borrowing.update({
         where: { id: parseInt(id) },
-        data: { statusPeminjaman: 'AKTIF' }
+        data: { statusPeminjaman: "AKTIF" },
       }),
       //change asset status 'dipinjam"
       prisma.asset.update({
         where: { id: borrowing.assetId },
-        data: { statusKetersediaan: 'DIPINJAM' }
-      })
+        data: { statusKetersediaan: "DIPINJAM" },
+      }),
     ]);
 
     res.status(200).json({
-      status: 'success',
-      message: 'Permintaan pinjaman berhasil disetujui',
-      data: { updateBorrowing, updateAsset }
+      status: "success",
+      message: "Permintaan pinjaman berhasil disetujui",
+      data: { updateBorrowing, updateAsset },
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: 'Gagal menyetujui peminjaman'
+      status: "error",
+      message: "Gagal menyetujui peminjaman",
+    });
+  }
+};
+
+// update borrowing status to 'DITOLAK'
+export const rejectBorrowing = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // validate borrowing data
+    const borrowing = await prisma.borrowing.findUnique({
+      where: { id: parseInt(id) },
+    });
+
+    if (!borrowing || borrowing.statusPeminjaman !== "PENDING") {
+      return res.status(400).json({
+        status: "error",
+        message: "Data peminjaman tidak valid atau sudah diproses",
+      });
+    }
+
+    // Ubah status menjadi DITOLAK
+    const rejectedBorrowing = await prisma.borrowing.update({
+      where: { id: parseInt(id) },
+      data: { statusPeminjaman: "DITOLAK" },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Permintaan peminjaman berhasil ditolak",
+      data: rejectedBorrowing,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: "Gagal menolak peminjaman",
     });
   }
 };
 
 //update return asset
 export const returnAsset = async (req, res) => {
-  try{
+  try {
     const { id } = req.params;
     const { kondisiKembali, catatan } = req.body;
 
     const borrowing = await prisma.borrowing.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
     });
-    if(!borrowing || borrowing.statusPeminjaman !== 'AKTIF'){
+    if (!borrowing || borrowing.statusPeminjaman !== "AKTIF") {
       return res.status(400).json({
-        status: 'error',
-        message: 'Data peminjaman tidak valid atau sudah selesai'
+        status: "error",
+        message: "Data peminjaman tidak valid atau sudah selesai",
       });
     }
 
@@ -106,31 +142,31 @@ export const returnAsset = async (req, res) => {
     const [finishedBorrowing, returnAsset] = await prisma.$transaction([
       prisma.borrowing.update({
         where: { id: parseInt(id) },
-        data: { 
-          statusPeminjaman: 'SELESAI',
+        data: {
+          statusPeminjaman: "SELESAI",
           tanggalKembali: new Date(),
-          kondisiKembali: kondisiKembali || 'BAIK',
-          catatan: catatan || borrowing.catatan
-        }
+          kondisiKembali: kondisiKembali || "BAIK",
+          catatan: catatan || borrowing.catatan,
+        },
       }),
       prisma.asset.update({
         where: { id: borrowing.assetId },
         data: {
-          statusKetersediaan: 'TERSEDIA',
-          kondisi: kondisiKembali || 'BAIK'
-        }
-      })
+          statusKetersediaan: "TERSEDIA",
+          kondisi: kondisiKembali || "BAIK",
+        },
+      }),
     ]);
 
     res.status(200).json({
-      status: 'success',
-      message: 'Peminjaman berhasil diselesaikan',
-      data: { finishedBorrowing, returnAsset }
+      status: "success",
+      message: "Peminjaman berhasil diselesaikan",
+      data: { finishedBorrowing, returnAsset },
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: 'Gagal memproses pengembalian aset'
+      status: "error",
+      message: "Gagal memproses pengembalian aset",
     });
   }
 };
@@ -138,25 +174,25 @@ export const returnAsset = async (req, res) => {
 //borrowing history
 export const getBorrowings = async (req, res) => {
   try {
-    const filter = req.user.role === 'USER' ? { userId: req.user.id } : {};
+    const filter = req.user.role === "USER" ? { userId: req.user.id } : {};
 
     const borrowings = await prisma.borrowing.findMany({
       where: filter,
       include: {
         user: { select: { namaLengkap: true, nim: true } },
-        asset: { select: { namaAset: true, kodeAset: true } }
+        asset: { select: { namaAset: true, kodeAset: true } },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
-    
+
     res.status(200).json({
-      status: 'success',
-      data: borrowings
+      status: "success",
+      data: borrowings,
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: 'Gagal mengambil riwayat peminjaman'
+      status: "error",
+      message: "Gagal mengambil riwayat peminjaman",
     });
   }
 };
