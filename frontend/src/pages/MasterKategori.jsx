@@ -1,78 +1,91 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import api from "../services/api";
 import Sidebar from "../components/Sidebar";
 import { Plus, Trash2, FolderPlus, Tag, Edit3, X, Check } from "lucide-react";
 
 export default function MasterKategori({ role, setRole, onLogout, onNavigate, currentPage }) {
-  // Mock Data
-  const [kategoriList, setKategoriList] = useState([
-    { id: 1, kode: "ELK", nama: "Elektronik", ket: "Laptop, Proyektor, WebCam, Pointer, dll." },
-    { id: 2, kode: "FUR", nama: "Furnitur", ket: "Kursi Kuliah, Meja Dosen, Lemari Arsip, dll." },
-  ]);
+  const [kategoriList, setKategoriList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // State Input Form
-  const [kode, setKode] = useState("");
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get("/masters/categories");
+      setKategoriList(response.data.data);
+    } catch (error) {
+      console.error("Gagal mengambil kategori", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
   const [nama, setNama] = useState("");
   const [ket, setKet] = useState("");
 
-  // State Baru untuk Manajemen Edit
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
 
-  // Fungsi saat tombol Edit di tabel diklik
+  // tombol Edit
   const handleEditClick = (item) => {
     setIsEditing(true);
     setEditId(item.id);
-    setKode(item.kode);
-    setNama(item.nama);
-    setKet(item.ket);
+
+    setNama(item.namaKategori);
+    setKet(item.deskripsi || "");
   };
 
-  // Fungsi untuk membatalkan mode edit
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditId(null);
-    setKode("");
     setNama("");
     setKet("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!kode || !nama) {
-      alert("Kode dan Nama Kategori wajib diisi!");
+
+    if (!nama) {
+      alert("Nama kategori wajib diisi");
       return;
     }
 
-    if (isEditing) {
-      // LOGIKA UPDATE DATA
-      setKategoriList(
-        kategoriList.map((item) =>
-          item.id === editId ? { ...item, kode: kode.toUpperCase(), nama: nama, ket: ket || "-" } : item,
-        ),
-      );
-      handleCancelEdit(); // Reset form & keluar dari mode edit
-    } else {
-      // LOGIKA TAMBAH DATA (Sama seperti sebelumnya)
-      const baru = {
-        id: Date.now(),
-        kode: kode.toUpperCase(),
-        nama: nama,
-        ket: ket || "-",
-      };
-      setKategoriList([...kategoriList, baru]);
-      setKode("");
-      setNama("");
-      setKet("");
+    try {
+      if (isEditing) {
+        await api.put(`/masters/categories/${editId}`, {
+          namaKategori: nama,
+          deskripsi: ket,
+        });
+
+        handleCancelEdit();
+      } else {
+        await api.post("/masters/categories", {
+          namaKategori: nama,
+          deskripsi: ket,
+        });
+
+        setNama("");
+        setKet("");
+      }
+
+      fetchCategories();
+    } catch (error) {
+      console.error(error);
+      alert("Terjadi kesalahan");
     }
   };
 
-  const handleDelete = (id) => {
-    // Jika sedang mengedit item tersebut, batalkan dulu sebelum dihapus
-    if (isEditing && editId === id) {
-      handleCancelEdit();
-    }
-    if (window.confirm("Apakah Anda yakin ingin menghapus kategori ini?")) {
-      setKategoriList(kategoriList.filter((item) => item.id !== id));
+  const handleDelete = async (id) => {
+    if (!window.confirm("Yakin ingin menghapus kategori?")) return;
+
+    try {
+      await api.delete(`/masters/categories/${id}`);
+
+      fetchCategories();
+    } catch (error) {
+      alert(error.response?.data?.message || "Gagal menghapus kategori");
     }
   };
 
@@ -95,7 +108,7 @@ export default function MasterKategori({ role, setRole, onLogout, onNavigate, cu
         </header>
 
         <main className="p-8 flex-1 max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Form Tambah / Edit Kategori */}
+          {/* Form Add & Edit Kategori */}
           <form
             onSubmit={handleSubmit}
             className={`lg:col-span-4 bg-white p-6 rounded-2xl border shadow-sm space-y-4 transition-colors ${isEditing ? "border-amber-300 bg-amber-50/10" : "border-slate-200"}`}
@@ -103,19 +116,6 @@ export default function MasterKategori({ role, setRole, onLogout, onNavigate, cu
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
               <FolderPlus size={16} /> {isEditing ? "Ubah Kategori" : "Tambah Kategori"}
             </h3>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                Kode Kategori (Max 3 Huruf)
-              </label>
-              <input
-                type="text"
-                maxLength={3}
-                placeholder="Contoh: ELK"
-                value={kode}
-                onChange={(e) => setKode(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Kategori</label>
               <input
@@ -162,41 +162,61 @@ export default function MasterKategori({ role, setRole, onLogout, onNavigate, cu
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="px-6 py-3">Kode</th>
+                  <th className="px-6 py-3">ID</th>
                   <th className="px-6 py-3">Nama Kategori</th>
                   <th className="px-6 py-3">Deskripsi</th>
                   <th className="px-6 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {kategoriList.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`transition ${isEditing && editId === item.id ? "bg-amber-50/40" : "hover:bg-slate-50/80"}`}
-                  >
-                    <td className="px-6 py-4 font-bold text-blue-600">{item.kode}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-800">{item.nama}</td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{item.ket}</td>
-                    <td className="px-6 py-4 text-center flex items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleEditClick(item)}
-                        className="text-amber-600 hover:bg-amber-50 p-2 rounded-lg transition cursor-pointer"
-                        title="Edit Data"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item.id)}
-                        className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition cursor-pointer"
-                        title="Hapus Data"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-slate-500">
+                      Memuat data...
                     </td>
                   </tr>
-                ))}
+                ) : kategoriList.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-slate-500">
+                      Belum ada kategori
+                    </td>
+                  </tr>
+                ) : (
+                  kategoriList.map((item) => (
+                    <tr
+                      key={item.id}
+                      className={`transition ${
+                        isEditing && editId === item.id ? "bg-amber-50/40" : "hover:bg-slate-50/80"
+                      }`}
+                    >
+                      <td className="px-6 py-4 font-bold text-blue-600">{item.id}</td>
+
+                      <td className="px-6 py-4 font-semibold text-slate-800">{item.namaKategori}</td>
+
+                      <td className="px-6 py-4 text-slate-500 text-xs">{item.deskripsi}</td>
+
+                      <td className="px-6 py-4 text-center flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEditClick(item)}
+                          className="text-amber-600 hover:bg-amber-50 p-2 rounded-lg transition cursor-pointer"
+                          title="Edit Data"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item.id)}
+                          className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition cursor-pointer"
+                          title="Hapus Data"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
