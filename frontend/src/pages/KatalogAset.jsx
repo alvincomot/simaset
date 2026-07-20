@@ -1,46 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import { Search, Plus, Edit, Trash2, X } from "lucide-react";
+import api from "../services/api";
 
 export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
-  const [assets, setAssets] = useState([
-    {
-      id: 1,
-      kode: "AST-ELK-001",
-      nama: "Proyektor Epson X500",
-      kategori: "Elektronik",
-      lokasi: "Lab Komputer A",
-      status: "Tersedia",
-      kondisi: "Baik",
-    },
-    {
-      id: 2,
-      kode: "AST-ELK-002",
-      nama: "PC Desktop ASUS Core i7",
-      kategori: "Elektronik",
-      lokasi: "Lab Komputer B",
-      status: "Dipinjam",
-      kondisi: "Baik",
-    },
-    {
-      id: 3,
-      kode: "AST-FUR-001",
-      nama: "Kursi Kuliah Chitose",
-      kategori: "Furnitur",
-      lokasi: "Ruang Dosen 1",
-      status: "Tersedia",
-      kondisi: "Rusak Ringan",
-    },
-    {
-      id: 4,
-      kode: "AST-ELK-003",
-      nama: "Printer HP Laserjet",
-      kategori: "Elektronik",
-      lokasi: "Tata Usaha FTI",
-      status: "Rusak",
-      kondisi: "Rusak Berat",
-    },
-  ]);
+  const [assets, setAssets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorFetch, setErrorFetch] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKategori, setSelectedKategori] = useState("Semua");
@@ -48,6 +16,8 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     kode: "",
     nama: "",
@@ -57,76 +27,135 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
     kondisi: "Baik",
   });
 
+  // 1. get
+  const fetchAssets = async () => {
+    try {
+      setLoading(true);
+      setErrorFetch("");
+
+      const response = await api.get("/assets");
+
+      const dataAset = response.data.data || response.data;
+
+      if (Array.isArray(dataAset)) {
+        setAssets(dataAset);
+      } else {
+        console.error("Data dari server bukan berbentuk array:", response.data);
+        setAssets([]);
+      }
+    } catch (err) {
+      console.error("Gagal mengambil data aset:", err);
+      setErrorFetch("Gagal memuat data inventaris aset dari server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssets();
+    fetchMasterData();
+  }, []);
+
   const filteredAssets = assets.filter((asset) => {
     const matchesSearch =
-      asset.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.kode.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesKategori = selectedKategori === "Semua" || asset.kategori === selectedKategori;
-    const matchesStatus = selectedStatus === "Semua" || asset.status === selectedStatus;
+      (asset.namaAset?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (asset.kodeAset?.toLowerCase() || "").includes(searchQuery.toLowerCase());
+    const matchesKategori = selectedKategori === "Semua" || Number(asset.categoryId) === Number(selectedKategori);
+    const matchesStatus = selectedStatus === "Semua" || asset.statusKetersediaan === selectedStatus;
 
-    if (role === "Pengguna Biasa") {
-      return matchesSearch && matchesKategori && asset.status === "Tersedia";
+    if (role !== "SUPER_ADMIN" && role !== "STAFF") {
+      return matchesSearch && matchesKategori && asset.statusKetersediaan === "TERSEDIA";
     }
     return matchesSearch && matchesKategori && matchesStatus;
   });
 
+  // 2. create
   const openAddModal = () => {
-    if (role === "Pengguna Biasa") return;
+    if (role === "USER") return;
     setEditingAsset(null);
-    // Default form untuk aset baru sesuai PRD
     setFormData({
-      kode: "",
-      nama: "",
-      kategori: "Elektronik",
-      lokasi: "Lab Komputer A",
-      status: "Tersedia",
-      kondisi: "Baik",
+      namaAset: "",
+      categoryId: 1,
+      locationId: 1,
+      kondisi: "BAIK",
+      statusKetersediaan: "TERSEDIA",
     });
     setIsModalOpen(true);
   };
 
+  // 3. update
   const openEditModal = (asset) => {
-    if (role === "Pengguna Biasa") return;
+    if (role === "USER") return;
     setEditingAsset(asset);
-    setFormData({ ...asset });
+    setFormData({
+      kodeAset: asset.kodeAset,
+      namaAset: asset.namaAset,
+      categoryId: asset.categoryId,
+      locationId: asset.locationId,
+      kondisi: asset.kondisi,
+      statusKetersediaan: asset.statusKetersediaan,
+    });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id) => {
-    if (role !== "Super Admin") {
+  // 4. delete
+  const handleDelete = async (id) => {
+    if (role !== "SUPER_ADMIN") {
       alert("Akses Ditolak: Hanya Super Admin yang dapat menghapus aset.");
       return;
     }
     if (window.confirm("Apakah Anda yakin ingin menghapus aset ini dari inventaris?")) {
-      setAssets(assets.filter((asset) => asset.id !== id));
+      try {
+        await api.delete(`/assets/${id}`);
+        setAssets(assets.filter((asset) => asset.id !== id));
+      } catch (err) {
+        alert(err.response?.data?.message || "Gagal menghapus aset dari database.");
+      }
     }
   };
 
-  // --- LOGIKA SIMPAN DI-UPDATE SESUAI ALUR PRD ---
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (editingAsset) {
-      // Jalur Edit/Update
-      setAssets(assets.map((item) => (item.id === editingAsset.id ? { ...item, ...formData } : item)));
-    } else {
-      // Jalur Penambahan Aset Baru Sesuai PRD:
-      // 1. Generate Kode Unik Otomatis (Format: AST-[3 Huruf Kategori]-[3 Digit Nomor Acak])
-      const prefixKategori = formData.kategori.substring(0, 3).toUpperCase();
-      const nomorAcak = Math.floor(100 + Math.random() * 900); // Generate 3 digit angka unik tiruan
-      const generatedKode = `AST-${prefixKategori}-${nomorAcak}`;
+    setSubmitLoading(true);
 
-      const newAsset = {
-        id: Date.now(),
-        kode: generatedKode, // Sistem auto-generate kode unik
-        nama: formData.nama,
-        kategori: formData.kategori,
-        lokasi: formData.lokasi,
-        kondisi: formData.kondisi,
-        status: "Tersedia", // PRD: Wajib berstatus "Tersedia" di awal masuk inventaris
-      };
-      setAssets([...assets, newAsset]);
+    const backendPayload = {
+      namaAset: formData.namaAset,
+      categoryId: formData.categoryId,
+      locationId: formData.locationId,
+      kondisi: formData.kondisi,
+      statusKetersediaan: formData.statusKetersediaan,
+    };
+
+    try {
+      if (editingAsset) {
+        await api.put(`/assets/${editingAsset.id}`, backendPayload);
+      } else {
+        await api.post("/assets", backendPayload);
+      }
+
+      await fetchAssets();
+
+      setIsModalOpen(false);
+      setIsModalOpen(false);
+    } catch (err) {
+      alert(err.response?.data?.message || "Gagal menyimpan data.");
+    } finally {
+      setSubmitLoading(false);
     }
-    setIsModalOpen(false);
+  };
+
+  const fetchMasterData = async () => {
+    try {
+      const [categoryRes, locationRes] = await Promise.all([
+        api.get("/masters/categories"),
+        api.get("/masters/locations"),
+      ]);
+
+      setCategories(categoryRes.data.data);
+      setLocations(locationRes.data.data);
+    } catch (err) {
+      console.error("Gagal mengambil master data", err);
+    }
   };
 
   return (
@@ -146,6 +175,12 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
         </header>
 
         <main className="p-8 flex-1 overflow-y-auto">
+          {errorFetch && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
+              {errorFetch}
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div className="relative flex-1 max-w-md">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
@@ -161,30 +196,35 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
             </div>
 
             <div className="flex items-center gap-3">
-              <select
-                value={selectedKategori}
-                onChange={(e) => setSelectedKategori(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none shadow-sm"
-              >
-                <option value="Semua">Semua Kategori</option>
-                <option value="Elektronik">Elektronik</option>
-                <option value="Furnitur">Furnitur</option>
-              </select>
+              {role !== "USER" && (
+                <select
+                  value={selectedKategori}
+                  onChange={(e) => setSelectedKategori(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none shadow-sm"
+                >
+                  <option value="Semua">Semua Kategori</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.namaKategori}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-              {role !== "Pengguna Biasa" && (
+              {role !== "USER" && (
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none shadow-sm"
                 >
                   <option value="Semua">Semua Status</option>
-                  <option value="Tersedia">Tersedia</option>
-                  <option value="Dipinjam">Dipinjam</option>
-                  <option value="Rusak">Rusak</option>
+                  <option value="TERSEDIA">Tersedia</option>
+                  <option value="DIPINJAM">Dipinjam</option>
+                  <option value="PEMELIHARAAN">Pemeliharaan</option>
                 </select>
               )}
 
-              {role !== "Pengguna Biasa" && (
+              {role !== "USER" && (
                 <button
                   onClick={openAddModal}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-md shadow-blue-100 transition"
@@ -206,23 +246,29 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                   <th className="px-6 py-4">Lokasi</th>
                   <th className="px-6 py-4">Kondisi</th>
                   <th className="px-6 py-4">Status</th>
-                  {role !== "Pengguna Biasa" && <th className="px-6 py-4 text-center">Aksi</th>}
+                  {role !== "USER" && <th className="px-6 py-4 text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredAssets.length > 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={role !== "USER" ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
+                      Memuat data aset dari server...
+                    </td>
+                  </tr>
+                ) : filteredAssets.length > 0 ? (
                   filteredAssets.map((asset) => (
                     <tr key={asset.id} className="hover:bg-slate-50/80 transition">
-                      <td className="px-6 py-4 font-mono text-xs text-slate-600 font-bold">{asset.kode}</td>
-                      <td className="px-6 py-4 font-semibold text-slate-900">{asset.nama}</td>
-                      <td className="px-6 py-4 text-slate-600">{asset.kategori}</td>
-                      <td className="px-6 py-4 text-slate-600">{asset.lokasi}</td>
+                      <td className="px-6 py-4 font-mono text-xs text-slate-600 font-bold">{asset.kodeAset}</td>
+                      <td className="px-6 py-4 font-semibold text-slate-900">{asset.namaAset}</td>
+                      <td className="px-6 py-4 text-slate-600">{asset.category?.namaKategori}</td>
+                      <td className="px-6 py-4 text-slate-600">{asset.location?.namaLokasi}</td>
                       <td className="px-6 py-4">
                         <span
                           className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                            asset.kondisi === "Baik"
+                            asset.kondisi === "BAIK"
                               ? "bg-green-50 text-green-700"
-                              : asset.kondisi === "Rusak Ringan"
+                              : asset.kondisi === "RUSAK"
                                 ? "bg-amber-50 text-amber-700"
                                 : "bg-red-50 text-red-700"
                           }`}
@@ -233,32 +279,32 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                       <td className="px-6 py-4">
                         <span
                           className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                            asset.status === "Tersedia"
+                            asset.statusKetersediaan === "TERSEDIA"
                               ? "bg-emerald-100 text-emerald-800"
-                              : asset.status === "Dipinjam"
+                              : asset.statusKetersediaan === "DIPINJAM"
                                 ? "bg-blue-100 text-blue-800"
                                 : "bg-red-100 text-red-800"
                           }`}
                         >
-                          {asset.status}
+                          {asset.statusKetersediaan}
                         </span>
                       </td>
 
-                      {role !== "Pengguna Biasa" && (
+                      {role !== "USER" && (
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => openEditModal(asset)}
-                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              className="text-amber-600 hover:bg-amber-50 p-2 rounded-lg transition cursor-pointer"
                               title="Edit Aset"
                             >
                               <Edit size={16} />
                             </button>
 
-                            {role === "Super Admin" && (
+                            {role === "SUPER_ADMIN" && (
                               <button
                                 onClick={() => handleDelete(asset.id)}
-                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition cursor-pointer"
                                 title="Hapus Aset"
                               >
                                 <Trash2 size={16} />
@@ -271,7 +317,7 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={role !== "Pengguna Biasa" ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
+                    <td colSpan={role !== "USER" ? 7 : 6} className="px-6 py-12 text-center text-slate-400">
                       Tidak ada data aset yang cocok dengan pencarian atau filter Anda.
                     </td>
                   </tr>
@@ -282,7 +328,7 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
         </main>
       </div>
 
-      {/* --- FORMS MODAL KONDISIONAL (TAMBAH VS EDIT) --- */}
+      {/* --- modal add + edit */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl border border-slate-200 overflow-hidden">
@@ -299,7 +345,6 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
             </div>
 
             <form onSubmit={handleSave} className="p-6 space-y-4">
-              {/* KOLOM KODE: Hanya muncul & dibaca saat EDIT ASET */}
               {editingAsset && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kode Aset</label>
@@ -307,7 +352,7 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                     type="text"
                     disabled
                     className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 text-sm cursor-not-allowed font-mono font-bold"
-                    value={formData.kode}
+                    value={formData.kodeAset}
                   />
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     *Kode aset bersifat permanen dan tidak dapat diubah.
@@ -320,9 +365,15 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                 <input
                   type="text"
                   required
+                  disabled={submitLoading}
                   placeholder="Nama barang..."
-                  value={formData.nama}
-                  onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
+                  value={formData.namaAset}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      namaAset: e.target.value,
+                    })
+                  }
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
@@ -331,25 +382,29 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Kategori</label>
                   <select
-                    value={formData.kategori}
-                    onChange={(e) => setFormData({ ...formData, kategori: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({ ...formData, categoryId: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm"
                   >
-                    <option value="Elektronik">Elektronik</option>
-                    <option value="Furnitur">Furnitur</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.namaKategori}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Lokasi</label>
                   <select
-                    value={formData.lokasi}
-                    onChange={(e) => setFormData({ ...formData, lokasi: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    value={formData.locationId}
+                    onChange={(e) => setFormData({ ...formData, locationId: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm"
                   >
-                    <option value="Lab Komputer A">Lab Komputer A</option>
-                    <option value="Lab Komputer B">Lab Komputer B</option>
-                    <option value="Ruang Dosen 1">Ruang Dosen 1</option>
-                    <option value="Tata Usaha FTI">Tata Usaha FTI</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.namaLokasi}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -360,26 +415,25 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                   <select
                     value={formData.kondisi}
                     onChange={(e) => setFormData({ ...formData, kondisi: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm"
                   >
-                    <option value="Baik">Baik</option>
-                    <option value="Rusak Ringan">Rusak Ringan</option>
-                    <option value="Rusak Berat">Rusak Berat</option>
+                    <option value="BAIK">Baik</option>
+                    <option value="RUSAK">Rusak</option>
                   </select>
                 </div>
 
-                {/* KOLOM STATUS KETERSEDIAAN: Di-render hanya saat EDIT ASET */}
                 {editingAsset ? (
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Status</label>
                     <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      value={formData.statusKetersediaan}
+                      disabled={submitLoading}
+                      onChange={(e) => setFormData({ ...formData, statusKetersediaan: e.target.value })}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                      <option value="Tersedia">Tersedia</option>
-                      <option value="Dipinjam">Dipinjam</option>
-                      <option value="Rusak">Rusak</option>
+                      <option value="TERSEDIA">Tersedia</option>
+                      <option value="DIPINJAM">Dipinjam</option>
+                      <option value="PEMELIHARAAN">Pemeliharaan</option>
                     </select>
                   </div>
                 ) : (
@@ -395,6 +449,7 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={submitLoading}
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition"
                 >
@@ -402,9 +457,10 @@ export default function KatalogAset({ role, setRole, onLogout, onNavigate }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-md shadow-blue-100 transition"
+                  disabled={submitLoading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-md shadow-blue-100 transition disabled:opacity-50"
                 >
-                  {editingAsset ? "Simpan Perubahan" : "Tambah Barang"}
+                  {submitLoading ? "Menyimpan..." : editingAsset ? "Simpan Perubahan" : "Tambah Barang"}
                 </button>
               </div>
             </form>
